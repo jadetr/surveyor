@@ -5,7 +5,7 @@ module Surveyor
         # Associations
         base.send :belongs_to, :answer
         base.send :belongs_to, :dependency
-        base.send :belongs_to, :dependent_question, :foreign_key => :question_id, :class_name => :question
+        base.send :belongs_to, :dependent_question, :foreign_key => :question_id, :class_name => 'Question'
         base.send :belongs_to, :question
 
         @@validations_already_included ||= nil
