@@ -1,48 +1,58 @@
+# encoding: UTF-8
 require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 
-describe SurveySection, "when saving a survey_section" do
-  before(:each) do
-    @valid_attributes={:title => "foo", :survey_id => 2, :display_order => 4}
-    @survey_section = SurveySection.new(@valid_attributes)
-  end
+describe SurveySection do
+    let(:survey_section){ FactoryGirl.create(:survey_section) }
 
-  it "should be invalid without title" do
-    @survey_section.title = nil
-    @survey_section.should have(1).error_on(:title)
-  end
-  
-  it "should have a parent survey" do
-    # this causes issues with building and saving
-    # @survey_section.survey_id = nil
-    # @survey_section.should have(1).error_on(:survey)
-  end
-  it "should protect timestamps" do
-    saved_attrs = @survey_section.attributes
-    if defined? ActiveModel::MassAssignmentSecurity::Error
-      lambda {@survey_section.update_attributes(:created_at => 3.days.ago, :updated_at => 3.hours.ago)}.should raise_error(ActiveModel::MassAssignmentSecurity::Error)
-    else
-      @survey_section.attributes = {:created_at => 3.days.ago, :updated_at => 3.hours.ago} # automatically protected by Rails
+  context "when creating" do
+    it "is invalid without #title" do
+      survey_section.title = nil
+      survey_section.should have(1).error_on(:title)
     end
-    @survey_section.attributes.should == saved_attrs
   end
-end
 
-describe SurveySection, "with questions" do
-  before(:each) do
-    @survey_section = Factory(:survey_section, :title => "Rhymes", :display_order => 4)
-    @q1 = @survey_section.questions.create(:text => "Peep", :display_order => 3)
-    @q2 = @survey_section.questions.create(:text => "Little", :display_order => 1)
-    @q3 = @survey_section.questions.create(:text => "Bo", :display_order => 2)
+  context "with questions" do
+    let(:question_1){ FactoryGirl.create(:question, :survey_section => survey_section, :display_order => 3, :text => "Peep")}
+    let(:question_2){ FactoryGirl.create(:question, :survey_section => survey_section, :display_order => 1, :text => "Little")}
+    let(:question_3){ FactoryGirl.create(:question, :survey_section => survey_section, :display_order => 2, :text => "Bo")}
+    before do
+      [question_1, question_2, question_3].each{|q| survey_section.questions << q }
+    end
+    it{ survey_section.should have(3).questions}
+    it "gets questions in order" do
+      survey_section.questions.order("display_order asc").should == [question_2, question_3, question_1]
+      survey_section.questions.order("display_order asc").map(&:display_order).should == [1,2,3]
+    end
+    it "deletes child questions when deleted" do
+      question_ids = survey_section.questions.map(&:id)
+      survey_section.destroy
+      question_ids.each{|id| Question.find_by_id(id).should be_nil}
+    end
   end
-  
-  it "should return questions sorted in display order" do
-    @survey_section.questions.should have(3).questions
-    @survey_section.questions.should == [@q2,@q3,@q1]
+
+  context "with translations" do
+    require 'yaml'
+    let(:survey){ FactoryGirl.create(:survey) }
+    let(:survey_translation){
+      FactoryGirl.create(:survey_translation, :locale => :es, :translation => {
+        :survey_sections => {
+          :one => {
+            :title => "Uno"
+          }
+        }
+      }.to_yaml)
+    }
+    before do
+      survey_section.reference_identifier = "one"
+      survey_section.survey = survey
+      survey.translations << survey_translation
+    end
+    it "returns its own translation" do
+      YAML.load(survey_translation.translation).should_not be_nil
+      survey_section.translation(:es)[:title].should == "Uno"
+    end
+    it "returns its own default values" do
+      survey_section.translation(:de).should == {"title" => survey_section.title, "description" => survey_section.description}
+    end
   end
-  it "should delete questions when it is deleted" do
-    question_ids = @survey_section.questions.map(&:id)
-    @survey_section.destroy
-    question_ids.each{|id| Question.find_by_id(id).should be_nil}
-  end
-  
 end

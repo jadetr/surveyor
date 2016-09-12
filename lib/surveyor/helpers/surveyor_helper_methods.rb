@@ -1,17 +1,10 @@
-require 'surveyor/helpers/asset_pipeline'
-
 module Surveyor
   module Helpers
     module SurveyorHelperMethods
-      include AssetPipeline
 
       # Layout: stylsheets and javascripts
       def surveyor_includes
-        if asset_pipeline_enabled?
-          stylesheet_link_tag('surveyor_all') + javascript_include_tag('surveyor_all')
-        else
-          stylesheet_link_tag('surveyor/reset', 'surveyor/dateinput', 'surveyor/jquery-ui.custom', 'surveyor/jquery-ui-timepicker-addon', 'surveyor', 'custom') + javascript_include_tag('surveyor/jquery.tools.min', 'surveyor/jquery-ui', 'surveyor/jquery-ui-timepicker-addon', 'surveyor/jquery.surveyor')
-        end
+        stylesheet_link_tag('surveyor_all') + javascript_include_tag('surveyor_all')
       end
       # Helper for displaying warning/notice/error flash messages
       def flash_messages(types)
@@ -28,42 +21,30 @@ module Surveyor
         "&nbsp;&nbsp;You answered &quot;#{trigger_responses.join("&quot; and &quot;")}&quot; to the question &quot;#{dependent_questions.map(&:text).join("&quot;,&quot;")}&quot;"
       end
       def menu_button_for(section)
-        submit_tag(section.title, :name => "section[#{section.id}]")
+        submit_tag(section.translation(I18n.locale)[:title], :name => "section[#{section.id}]")
       end
       def previous_section
         # use copy in memory instead of making extra db calls
-        submit_tag(t('surveyor.previous_section').html_safe, :name => "section[#{@sections[@sections.index(@section)-1].id}]") unless @sections.first == @section
+        prev_index = [(@sections.index(@section) || 0) - 1, 0].max
+        submit_tag(t('surveyor.previous_section').html_safe, :name => "section[#{@sections[prev_index].id}]") unless @sections[0] == @section
       end
       def next_section
         # use copy in memory instead of making extra db calls
-        @sections.last == @section ? submit_tag(t('surveyor.click_here_to_finish').html_safe, :name => "finish") : submit_tag(t('surveyor.next_section').html_safe, :name => "section[#{@sections[@sections.index(@section)+1].id}]")
+        next_index = [(@sections.index(@section) || @sections.count) + 1, @sections.count].min
+        @sections.last == @section ? submit_tag(t('surveyor.click_here_to_finish').html_safe, :name => "finish") : submit_tag(t('surveyor.next_section').html_safe, :name => "section[#{@sections[next_index].id}]")
       end
 
       # Questions
-      def q_text(obj, context=nil)
+      def q_text(q, context=nil, locale=nil)
+        "#{next_question_number(q) unless (q.dependent? or q.display_type == "label" or q.display_type == "image" or q.part_of_group?)}#{q.text_for(nil, context, locale)}"
+      end
+
+      def next_question_number(question)
         @n ||= 0
-        return image_tag(obj.text) if obj.is_a?(Question) and obj.display_type == "image"
-        return obj.render_question_text(context) if obj.is_a?(Question) and (obj.dependent? or obj.display_type == "label" or obj.part_of_group?)
-        "#{@n += 1}) #{obj.render_question_text(context)}"
-      end
-      # def split_text(text = "") # Split text into with "|" delimiter - parts to go before/after input element
-      #   {:prefix => text.split("|")[0].blank? ? "&nbsp;" : text.split("|")[0], :postfix => text.split("|")[1] || "&nbsp;"}
-      # end
-      # def question_help_helper(question)
-      #   question.help_text.blank? ? "" : %Q(<span class="question-help">#{question.help_text}</span>)
-      # end
-
-      # Help_text
-      def render_help_text(obj, context=nil)
-        obj.render_help_text(context)
+        "<span class='qnum'>#{@n += 1}) </span>"
       end
 
-      # Answers
-      def a_text(obj, pos=nil, context = nil)
-        return image_tag(obj.text) if obj.is_a?(Answer) and obj.display_type == "image"
-        obj.split_or_hidden_text(pos, context)
-      end
-
+      # Responses
       def rc_to_attr(type_sym)
         case type_sym.to_s
         when /^answer$/ then :answer_id
@@ -78,11 +59,15 @@ module Surveyor
         end
       end
 
-      def generate_pick_none_input_html(value, default_value, css_class, response_class, disabled)
+      def generate_pick_none_input_html(value, default_value, css_class, response_class, disabled, input_mask, input_mask_placeholder)
         html = {}
         html[:class] = [response_class,css_class].reject{ |c| c.blank? }
-        html[:value] = default_value if value.blank?
+        html[:value] = value.blank? ? default_value : value
         html[:disabled] = disabled unless disabled.blank?
+        if input_mask
+          html[:'data-input-mask'] = input_mask
+          html[:'data-input-mask-placeholder'] = input_mask_placeholder unless input_mask_placeholder.blank?
+        end
         html
       end
 
